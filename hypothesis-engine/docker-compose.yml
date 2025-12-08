@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  # Vector Database
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: hypothesis-chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_AUTH_PROVIDER=chromadb.auth.token.TokenAuthServerProvider
+      - CHROMA_SERVER_AUTH_TOKEN_TRANSPORT_HEADER=X-Chroma-Token
+    networks:
+      - hypothesis-network
+    restart: unless-stopped
+
+  # PostgreSQL for metadata
+  postgres:
+    image: postgres:15-alpine
+    container_name: hypothesis-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=papers_metadata
+      - POSTGRES_USER=hypothesis_user
+      - POSTGRES_PASSWORD=change_me_in_production
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - hypothesis-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hypothesis_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    container_name: hypothesis-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - hypothesis-network
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+  # Hypothesis Engine API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hypothesis-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://hypothesis_user:change_me_in_production@postgres:5432/papers_metadata
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - REDIS_URL=redis://redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      redis:
+        condition: service_started
+    networks:
+      - hypothesis-network
+    restart: unless-stopped
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Streamlit Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hypothesis-frontend
+    command: streamlit run frontend/app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    volumes:
+      - ./frontend:/app/frontend
+    depends_on:
+      - api
+    networks:
+      - hypothesis-network
+    restart: unless-stopped
+
+networks:
+  hypothesis-network:
+    driver: bridge
+
+volumes:
+  chroma_data:
+  postgres_data:
+  redis_data:
