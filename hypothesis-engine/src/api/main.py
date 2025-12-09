@@ -84,8 +84,11 @@ if config.server.allow_cors:
     )
 
 
-# Include routers (will be uncommented when routes.py is created)
-# app.include_router(router, prefix="/api")
+# Import routes
+from src.api.routes import router
+
+# Include routers with /api prefix
+app.include_router(router, prefix="/api")
 
 
 @app.get("/", tags=["Root"])

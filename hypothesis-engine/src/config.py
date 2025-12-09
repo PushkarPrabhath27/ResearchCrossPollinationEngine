@@ -53,7 +53,7 @@ class DatabaseSettings(BaseSettings):
         description="Dimension of embedding vectors"
     )
     
-    model_config = SettingsConfigDict(env_prefix='DB_')
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='', extra='ignore')
 
 
 class APISettings(BaseSettings):
@@ -67,6 +67,14 @@ class APISettings(BaseSettings):
     anthropic_api_key: Optional[str] = Field(
         default=None,
         description="Anthropic API key (optional)"
+    )
+    google_api_key: Optional[str] = Field(
+        default=None,
+        description="Google AI Studio API key for Gemini"
+    )
+    groq_api_key: Optional[str] = Field(
+        default=None,
+        description="Groq API key"
     )
     
     # Academic APIs
@@ -101,7 +109,7 @@ class APISettings(BaseSettings):
         description="Delay between retries in seconds"
     )
     
-    model_config = SettingsConfigDict(env_prefix='API_')
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='', extra='ignore')
     
     @field_validator('entrez_email')
     @classmethod
@@ -116,9 +124,9 @@ class AgentSettings(BaseSettings):
     """LangChain agent and LLM configuration"""
     
     # LLM provider
-    llm_provider: Literal["openai", "ollama", "anthropic"] = Field(
-        default="openai",
-        description="LLM provider to use"
+    llm_provider: Literal["openai", "ollama", "anthropic", "google", "groq"] = Field(
+        default="google",
+        description="LLM provider to use (google, groq, openai, ollama, anthropic)"
     )
     llm_model: str = Field(
         default="gpt-4-turbo-preview",
@@ -169,7 +177,7 @@ class AgentSettings(BaseSettings):
         description="Enable verbose logging for agents"
     )
     
-    model_config = SettingsConfigDict(env_prefix='AGENT_')
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='', extra='ignore')
     
     @field_validator('llm_temperature')
     @classmethod
@@ -230,7 +238,7 @@ class IngestionSettings(BaseSettings):
         description="Directory for processed papers"
     )
     
-    model_config = SettingsConfigDict(env_prefix='INGEST_')
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='', extra='ignore')
 
 
 class SearchSettings(BaseSettings):
@@ -273,7 +281,7 @@ class SearchSettings(BaseSettings):
     abstract_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     content_weight: float = Field(default=0.2, ge=0.0, le=1.0)
     
-    model_config = SettingsConfigDict(env_prefix='SEARCH_')
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='', extra='ignore')
     
     @model_validator(mode='after')
     def validate_weights(self) -> 'SearchSettings':
@@ -316,7 +324,7 @@ class HypothesisSettings(BaseSettings):
     feasibility_weight: float = Field(default=0.3, ge=0.0, le=1.0)
     impact_weight: float = Field(default=0.3, ge=0.0, le=1.0)
     
-    model_config =  SettingsConfigDict(env_prefix='HYPO_')
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='', extra='ignore')
 
 
 class ServerSettings(BaseSettings):
@@ -353,7 +361,7 @@ class ServerSettings(BaseSettings):
         description="Allowed CORS origins"
     )
     
-    model_config = SettingsConfigDict(env_prefix='SERVER_')
+    model_config = SettingsConfigDict(env_file='.env', env_prefix='', extra='ignore')
 
 
 class Settings(BaseSettings):
@@ -382,7 +390,8 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
     
     @model_validator(mode='after')
@@ -395,6 +404,14 @@ class Settings(BaseSettings):
         if self.agent.llm_provider == "anthropic" and not self.api.anthropic_api_key:
             raise ValueError(
                 "ANTHROPIC_API_KEY is required when using Anthropic as LLM provider"
+            )
+        if self.agent.llm_provider == "google" and not self.api.google_api_key:
+            raise ValueError(
+                "GOOGLE_API_KEY is required when using Google as LLM provider"
+            )
+        if self.agent.llm_provider == "groq" and not self.api.groq_api_key:
+            raise ValueError(
+                "GROQ_API_KEY is required when using Groq as LLM provider"
             )
         return self
     
@@ -446,6 +463,10 @@ class Settings(BaseSettings):
             config["model"] = self.agent.ollama_model
         elif self.agent.llm_provider == "anthropic":
             config["api_key"] = self.api.anthropic_api_key
+        elif self.agent.llm_provider == "google":
+            config["api_key"] = self.api.google_api_key
+        elif self.agent.llm_provider == "groq":
+            config["api_key"] = self.api.groq_api_key
         
         return config
     

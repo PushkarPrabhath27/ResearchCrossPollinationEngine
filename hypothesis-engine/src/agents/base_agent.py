@@ -67,35 +67,78 @@ class BaseResearchAgent(ABC):
     
     def setup_llm(self):
         """
-        Configure language model based on config
+        Configure language model based on config with fallback support
         
         Returns:
             Configured LLM instance
         """
-        logger.info(f"Setting up LLM: {self.config.agent.llm_provider}")
+        provider = self.config.agent.llm_provider
+        logger.info(f"Setting up LLM: {provider}")
         
         try:
-            if self.config.agent.llm_provider == "openai":
-                return ChatOpenAI(
-                    model=self.config.agent.llm_model,
-                    temperature=self.temperature,
-                    max_tokens=self.config.agent.max_tokens,
-                    api_key=self.config.agent.openai_api_key,
-                    request_timeout=120
-                )
-            
-            elif self.config.agent.llm_provider == "ollama":
-                return Ollama(
-                    model=self.config.agent.llm_model,
-                    temperature=self.temperature
-                )
-            
-            else:
-                raise ValueError(f"Unsupported LLM provider: {self.config.agent.llm_provider}")
-                
+            return self._create_llm(provider)
         except Exception as e:
-            logger.error(f"Failed to setup LLM: {e}")
-            raise
+            logger.error(f"Failed to setup {provider} LLM: {e}")
+            
+            # Try fallback providers
+            fallback_order = ["groq", "google", "openai", "ollama"]
+            for fallback in fallback_order:
+                if fallback != provider:
+                    try:
+                        logger.info(f"Attempting fallback to {fallback}")
+                        return self._create_llm(fallback)
+                    except Exception as fe:
+                        logger.warning(f"Fallback to {fallback} failed: {fe}")
+            
+            raise RuntimeError("All LLM providers failed")
+    
+    def _create_llm(self, provider: str):
+        """
+        Create LLM instance for specific provider
+        
+        Args:
+            provider: LLM provider name (google, groq, openai, ollama)
+        
+        Returns:
+            LLM instance
+        """
+        if provider == "google":
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            return ChatGoogleGenerativeAI(
+                model=self.config.agent.llm_model or "gemini-1.5-flash",
+                google_api_key=self.config.api.google_api_key,
+                temperature=self.temperature,
+                max_output_tokens=self.config.agent.llm_max_tokens,
+                convert_system_message_to_human=True
+            )
+        
+        elif provider == "groq":
+            from langchain_groq import ChatGroq
+            return ChatGroq(
+                model=self.config.agent.llm_model or "llama3-8b-8192",
+                groq_api_key=self.config.api.groq_api_key,
+                temperature=self.temperature,
+                max_tokens=self.config.agent.llm_max_tokens
+            )
+        
+        elif provider == "openai":
+            return ChatOpenAI(
+                model=self.config.agent.llm_model,
+                temperature=self.temperature,
+                max_tokens=self.config.agent.llm_max_tokens,
+                api_key=self.config.api.openai_api_key,
+                request_timeout=120
+            )
+        
+        elif provider == "ollama":
+            return Ollama(
+                model=self.config.agent.llm_model or "llama2",
+                temperature=self.temperature
+            )
+        
+        else:
+            raise ValueError(f"Unsupported LLM provider: {provider}")
+
     
     def setup_memory(self) -> ConversationBufferMemory:
         """
