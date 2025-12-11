@@ -54,6 +54,15 @@ class GitHubFetcher:
         "mathematics": ["numerical", "optimization", "statistics", "algebra"]
     }
     
+    # TOPIC-specific keywords (detected from query)
+    TOPIC_KEYWORDS = {
+        "earthquake": ["seismic", "earthquake", "seismology", "geophysics", "hazard"],
+        "seismic": ["seismic", "earthquake", "waveform", "seismology"],
+        "weather": ["weather", "climate", "forecast", "meteorology", "atmospheric"],
+        "finance": ["stock", "trading", "financial", "market", "portfolio"],
+        "epidemiology": ["epidemic", "disease", "pandemic", "outbreak", "spread"]
+    }
+    
     # Well-known repos by field for fallback
     FIELD_REPOS = {
         "physics": [
@@ -70,6 +79,32 @@ class GitHubFetcher:
             ("pytorch/pytorch", "Deep learning framework", ["deep-learning"], 78000),
         ]
     }
+    
+    # TOPIC-specific repos (highest priority when topic detected)
+    TOPIC_REPOS = {
+        "earthquake": [
+            ("obspy/obspy", "Python framework for seismology - USGS compatible", ["seismology", "waveform"], 4200),
+            ("krischer/instaseis", "Instant seismogram calculation for earthquake simulation", ["seismology", "simulation"], 150),
+            ("GeoNet/staylorofford", "Earthquake analysis tools from GeoNet NZ", ["earthquake", "analysis"], 50),
+        ],
+        "seismic": [
+            ("obspy/obspy", "Python framework for processing seismological data", ["seismology", "waveform"], 4200),
+            ("SPECFEM/specfem3d", "3D seismic wave propagation simulation", ["seismic", "wave"], 350),
+        ],
+        "weather": [
+            ("ecmwf/climetlab", "Climate and weather data tools from ECMWF", ["climate", "weather"], 170),
+            ("unidata/metpy", "Meteorological data analysis toolkit", ["meteorology", "visualization"], 1200),
+        ],
+        "finance": [
+            ("microsoft/qlib", "Quantitative investment platform from Microsoft", ["quant", "trading"], 14500),
+            ("AI4Finance-Foundation/FinRL", "Deep reinforcement learning for finance", ["finance", "rl"], 8900),
+        ],
+        "epidemiology": [
+            ("mrc-ide/EpiEstim", "Epidemic parameter estimation", ["epidemic", "R"], 150),
+            ("epiforecasts/epinowcast", "Real-time epidemiological nowcasting", ["prediction", "disease"], 50),
+        ]
+    }
+
     
     def __init__(self):
         self.session = requests.Session()
@@ -88,34 +123,57 @@ class GitHubFetcher:
     def search_repos(self, query: str, field: str = "", max_results: int = 10) -> List[GitHubRepo]:
         """
         Search GitHub for repositories related to query.
-        Returns real repos with stars, descriptions, URLs.
+        IMPROVED: 
+        1. Detects TOPICS (earthquake, weather, etc.) and uses specific keywords
+        2. Filters out list repos
+        3. Prioritizes actual implementations
         """
         repos = []
+        
+        # Patterns to EXCLUDE (curated lists, not implementations)
+        EXCLUDE_PATTERNS = [
+            "awesome-", "curated-", "list-of-", "papers-", "-papers",
+            "collection", "resources", "reading-list", "-list", "notes",
+            "-daily", "arxiv-daily"
+        ]
         
         try:
             # Extract keywords and build query
             keywords = self._extract_keywords(query)
+            query_lower = query.lower()
             
-            # Add field-specific keywords
-            if field and field.lower() in self.FIELD_KEYWORDS:
+            # PRIORITY 1: Detect topics and use topic-specific keywords
+            detected_topic = None
+            for topic in self.TOPIC_KEYWORDS:
+                if topic in query_lower:
+                    detected_topic = topic
+                    # Add topic-specific keywords
+                    keywords = self.TOPIC_KEYWORDS[topic][:3] + keywords[:2]
+                    logger.info(f"[GitHub] Detected topic: {topic} - using specialized keywords")
+                    break
+            
+            # PRIORITY 2: Add field-specific keywords (if no topic detected)
+            if not detected_topic and field and field.lower() in self.FIELD_KEYWORDS:
                 keywords.extend(self.FIELD_KEYWORDS[field.lower()][:2])
             
-            # Build search query - simpler is better for GitHub
+            # Build search query - prioritize implementations
             search_terms = " ".join(keywords[:4])
-            search_query = f"{search_terms} in:name,description,readme"
+            # Add language filter for Python (most scientific code)
+            search_query = f"{search_terms} in:name,description,readme language:python stars:>20"
+
             
             url = f"{self.GITHUB_API}/search/repositories"
             params = {
                 "q": search_query,
                 "sort": "stars",
                 "order": "desc",
-                "per_page": min(max_results, 30)
+                "per_page": min(max_results * 3, 50)  # Fetch more to filter
             }
             
-            logger.info(f"[GitHub] Searching: {search_query[:50]}...")
+            logger.info(f"[GitHub] Searching: {search_query[:60]}...")
             
             # Small delay to avoid rate limiting
-            time.sleep(0.2)
+            time.sleep(0.3)
             
             response = self.session.get(url, params=params, timeout=30)
             
@@ -126,7 +184,7 @@ class GitHubFetcher:
             if response.status_code == 422:
                 # Query too complex, simplify
                 logger.warning("[GitHub] Query too complex, simplifying...")
-                params["q"] = " ".join(keywords[:2])
+                params["q"] = f"{' '.join(keywords[:2])} stars:>20"
                 response = self.session.get(url, params=params, timeout=30)
             
             response.raise_for_status()
@@ -134,6 +192,28 @@ class GitHubFetcher:
             
             for item in data.get("items", []):
                 try:
+                    repo_name = item.get("name", "").lower()
+                    full_name = item.get("full_name", "").lower()
+                    description = (item.get("description") or "").lower()
+                    
+                    # FILTER: Skip curated lists and non-implementation repos
+                    is_list_repo = any(pattern in repo_name or pattern in full_name 
+                                       for pattern in EXCLUDE_PATTERNS)
+                    
+                    # Also check description for list indicators
+                    list_indicators = ["curated list", "collection of", "list of", 
+                                       "awesome list", "reading list", "paper list"]
+                    is_list_description = any(ind in description for ind in list_indicators)
+                    
+                    if is_list_repo or is_list_description:
+                        logger.debug(f"[GitHub] Skipping list repo: {item.get('name')}")
+                        continue
+                    
+                    # FILTER: Skip very low quality repos
+                    stars = item.get("stargazers_count", 0)
+                    if stars < 20:
+                        continue
+                    
                     license_info = item.get("license", {})
                     license_name = license_info.get("name", "Unknown") if license_info else "Unknown"
                     
@@ -142,7 +222,7 @@ class GitHubFetcher:
                         full_name=item.get("full_name", "unknown/unknown"),
                         url=item.get("html_url", ""),
                         description=item.get("description", "No description") or "No description",
-                        stars=item.get("stargazers_count", 0),
+                        stars=stars,
                         forks=item.get("forks_count", 0),
                         language=item.get("language", "Python") or "Python",
                         last_updated=item.get("updated_at", "")[:10] if item.get("updated_at") else "Unknown",
@@ -152,77 +232,107 @@ class GitHubFetcher:
                     )
                     repos.append(repo)
                     
+                    # Stop once we have enough
+                    if len(repos) >= max_results:
+                        break
+                    
                 except Exception as e:
                     logger.warning(f"[GitHub] Error parsing repo: {e}")
                     continue
             
-            logger.info(f"[GitHub] Found {len(repos)} repositories")
+            logger.info(f"[GitHub] Found {len(repos)} implementation repositories (filtered)")
             
-            # If no results, use fallback
+            # If no results, use fallback (pass detected_topic)
             if not repos:
-                logger.info("[GitHub] No results, using fallback repos")
-                return self._get_fallback_repos(field)
+                logger.info("[GitHub] No implementation repos found, using fallback repos")
+                return self._get_fallback_repos(field, detected_topic)
             
         except Exception as e:
             logger.error(f"[GitHub] API error: {e}")
-            return self._get_fallback_repos(field)
+            return self._get_fallback_repos(field, None)
         
         return repos
+
     
-    def _get_fallback_repos(self, field: str) -> List[GitHubRepo]:
-        """Return well-known scientific repos as fallback based on field"""
-        
-        # Get field-specific repos
-        field_repos = self.FIELD_REPOS.get(field.lower(), self.FIELD_REPOS.get("computer_science", []))
-        
+    def _get_fallback_repos(self, field: str, topic: str = None) -> List[GitHubRepo]:
+        """
+        Return well-known scientific repos as fallback.
+        PRIORITY: Topic-specific repos > Field-specific repos > General repos
+        """
         fallbacks = []
-        for full_name, desc, topics, stars in field_repos:
-            parts = full_name.split("/")
-            fallbacks.append(GitHubRepo(
-                name=parts[1],
-                full_name=full_name,
-                url=f"https://github.com/{full_name}",
-                description=desc,
-                stars=stars,
-                forks=stars // 5,
-                language="Python",
-                last_updated="2024-12",
-                topics=topics,
-                owner=parts[0],
-                license="Apache-2.0"
-            ))
         
-        # Add general scientific repos
-        general = [
-            GitHubRepo(
-                name="scikit-learn",
-                full_name="scikit-learn/scikit-learn",
-                url="https://github.com/scikit-learn/scikit-learn",
-                description="Machine learning in Python - for data analysis and ML implementations",
-                stars=58000,
-                forks=25000,
-                language="Python",
-                last_updated="2024-12",
-                topics=["machine-learning", "python", "science"],
-                owner="scikit-learn",
-                license="BSD-3-Clause"
-            ),
-            GitHubRepo(
-                name="scipy",
-                full_name="scipy/scipy",
-                url="https://github.com/scipy/scipy",
-                description="Fundamental algorithms for scientific computing in Python",
-                stars=12500,
-                forks=5000,
-                language="Python",
-                last_updated="2024-12",
-                topics=["scientific-computing", "python", "algorithms"],
-                owner="scipy",
-                license="BSD-3-Clause"
-            )
-        ]
+        # PRIORITY 1: Topic-specific repos (earthquake → ObsPy)
+        if topic and topic.lower() in self.TOPIC_REPOS:
+            topic_repos = self.TOPIC_REPOS[topic.lower()]
+            logger.info(f"[GitHub] Using topic-specific fallback repos for: {topic}")
+            for full_name, desc, topics, stars in topic_repos:
+                parts = full_name.split("/")
+                fallbacks.append(GitHubRepo(
+                    name=parts[1],
+                    full_name=full_name,
+                    url=f"https://github.com/{full_name}",
+                    description=desc,
+                    stars=stars,
+                    forks=stars // 5,
+                    language="Python",
+                    last_updated="2024-12",
+                    topics=topics,
+                    owner=parts[0],
+                    license="Apache-2.0"
+                ))
         
-        return (fallbacks + general)[:5]
+        # PRIORITY 2: Field-specific repos
+        if len(fallbacks) < 3 and field:
+            field_repos = self.FIELD_REPOS.get(field.lower(), [])
+            for full_name, desc, topics, stars in field_repos:
+                parts = full_name.split("/")
+                fallbacks.append(GitHubRepo(
+                    name=parts[1],
+                    full_name=full_name,
+                    url=f"https://github.com/{full_name}",
+                    description=desc,
+                    stars=stars,
+                    forks=stars // 5,
+                    language="Python",
+                    last_updated="2024-12",
+                    topics=topics,
+                    owner=parts[0],
+                    license="Apache-2.0"
+                ))
+        
+        # PRIORITY 3: General scientific repos
+        if len(fallbacks) < 3:
+            general = [
+                GitHubRepo(
+                    name="scikit-learn",
+                    full_name="scikit-learn/scikit-learn",
+                    url="https://github.com/scikit-learn/scikit-learn",
+                    description="Machine learning in Python - for data analysis and ML implementations",
+                    stars=58000,
+                    forks=25000,
+                    language="Python",
+                    last_updated="2024-12",
+                    topics=["machine-learning", "python", "science"],
+                    owner="scikit-learn",
+                    license="BSD-3-Clause"
+                ),
+                GitHubRepo(
+                    name="scipy",
+                    full_name="scipy/scipy",
+                    url="https://github.com/scipy/scipy",
+                    description="Fundamental algorithms for scientific computing in Python",
+                    stars=12500,
+                    forks=5000,
+                    language="Python",
+                    last_updated="2024-12",
+                    topics=["scientific-computing", "python", "algorithms"],
+                    owner="scipy",
+                    license="BSD-3-Clause"
+                )
+            ]
+            fallbacks.extend(general)
+        
+        return fallbacks[:5]
     
     def format_repos_for_display(self, repos: List[GitHubRepo]) -> List[Dict[str, Any]]:
         """Format repos for frontend display"""

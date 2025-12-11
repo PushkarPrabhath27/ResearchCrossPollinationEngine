@@ -197,6 +197,168 @@ class DatasetFetcher:
         ]
     }
     
+    # QUERY-SPECIFIC TOPIC DATASETS - Matched by keywords in query
+    TOPIC_DATASETS = {
+        "earthquake": [
+            RealDataset(
+                name="USGS Earthquake Catalog",
+                source="U.S. Geological Survey",
+                url="https://earthquake.usgs.gov/earthquakes/search/",
+                description="Comprehensive database of global earthquake events with magnitude, location, depth, and time data",
+                size="1M+ events",
+                format="CSV, GeoJSON, QuakeML",
+                license="Public Domain",
+                downloads=0,
+                task_categories=["seismology", "geophysics", "time-series"]
+            ),
+            RealDataset(
+                name="IRIS Seismic Data",
+                source="Incorporated Research Institutions for Seismology",
+                url="https://www.iris.edu/hq/programs/seis_data",
+                description="Global seismometer waveform data from 4,000+ stations worldwide for earthquake research",
+                size="500+ TB",
+                format="miniSEED, SAC, ASCII",
+                license="Open Access",
+                downloads=0,
+                task_categories=["seismology", "waveform-analysis", "signal-processing"]
+            ),
+            RealDataset(
+                name="Southern California Earthquake Data Center",
+                source="Caltech/USGS",
+                url="https://scedc.caltech.edu/",
+                description="Seismic data for Southern California including waveforms, catalogs, and fault models",
+                size="100+ TB",
+                format="miniSEED, HDF5",
+                license="Open Access",
+                downloads=0,
+                task_categories=["seismology", "earthquake-prediction"]
+            )
+        ],
+        "seismic": [  # Alias for earthquake
+            RealDataset(
+                name="USGS Earthquake Catalog",
+                source="U.S. Geological Survey",
+                url="https://earthquake.usgs.gov/earthquakes/search/",
+                description="Comprehensive database of global earthquake events with magnitude, location, depth, and time data",
+                size="1M+ events",
+                format="CSV, GeoJSON, QuakeML",
+                license="Public Domain",
+                downloads=0,
+                task_categories=["seismology", "geophysics"]
+            ),
+            RealDataset(
+                name="IRIS Seismic Data",
+                source="Incorporated Research Institutions for Seismology",
+                url="https://www.iris.edu/hq/programs/seis_data",
+                description="Global seismometer waveform data from 4,000+ stations worldwide",
+                size="500+ TB",
+                format="miniSEED, SAC",
+                license="Open Access",
+                downloads=0,
+                task_categories=["seismology", "waveform-analysis"]
+            )
+        ],
+        "weather": [
+            RealDataset(
+                name="NOAA Climate Data Online",
+                source="NOAA",
+                url="https://www.ncei.noaa.gov/cdo-web/",
+                description="Historical weather and climate data from 1763 to present for global stations",
+                size="Petabytes",
+                format="CSV, NetCDF",
+                license="Public Domain",
+                downloads=0,
+                task_categories=["meteorology", "climate-science"]
+            ),
+            RealDataset(
+                name="ERA5 Reanalysis",
+                source="ECMWF Copernicus",
+                url="https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels",
+                description="Global hourly atmospheric reanalysis data from 1940 to present",
+                size="5+ PB",
+                format="NetCDF, GRIB",
+                license="Copernicus License",
+                downloads=0,
+                task_categories=["atmospheric-science", "weather-prediction"]
+            )
+        ],
+        "finance": [
+            RealDataset(
+                name="Yahoo Finance Historical Data",
+                source="Yahoo Finance",
+                url="https://finance.yahoo.com/",
+                description="Historical stock prices, volumes, and financial metrics for global markets",
+                size="Varies",
+                format="CSV, API",
+                license="Terms of Use",
+                downloads=0,
+                task_categories=["financial-markets", "time-series"]
+            ),
+            RealDataset(
+                name="Kaggle Stock Market Dataset",
+                source="Kaggle",
+                url="https://www.kaggle.com/datasets/borismarjanovic/price-volume-data-for-all-us-stocks-etfs",
+                description="Daily price and volume data for all US stocks and ETFs",
+                size="2+ GB",
+                format="CSV",
+                license="CC0",
+                downloads=0,
+                task_categories=["financial-analysis", "stock-prediction"]
+            )
+        ],
+        "epidemiology": [
+            RealDataset(
+                name="Johns Hopkins COVID-19 Data",
+                source="Johns Hopkins University",
+                url="https://github.com/CSSEGISandData/COVID-19",
+                description="Global COVID-19 case, death, and vaccination data updated daily",
+                size="100+ MB",
+                format="CSV",
+                license="CC BY 4.0",
+                downloads=0,
+                task_categories=["epidemiology", "disease-modeling"]
+            ),
+            RealDataset(
+                name="CDC Wonder Database",
+                source="CDC",
+                url="https://wonder.cdc.gov/",
+                description="Public health statistics including mortality, disease surveillance, and demographics",
+                size="Various",
+                format="CSV, API",
+                license="Public Domain",
+                downloads=0,
+                task_categories=["public-health", "epidemiology"]
+            )
+        ],
+        "quantum": [
+            RealDataset(
+                name="IBM Quantum Experience",
+                source="IBM Research",
+                url="https://quantum-computing.ibm.com/",
+                description="Access to real quantum computers and quantum circuit execution results",
+                size="Various",
+                format="Qiskit, JSON",
+                license="IBM Q Network Terms",
+                downloads=0,
+                task_categories=["quantum-computing", "quantum-ml"]
+            )
+        ],
+        "climate": [
+            RealDataset(
+                name="NOAA Global Historical Climatology Network",
+                source="NOAA",
+                url="https://www.ncei.noaa.gov/products/land-based-station/global-historical-climatology-network-daily",
+                description="Daily climate records from 100,000+ stations in 180+ countries",
+                size="100+ GB",
+                format="CSV",
+                license="Public Domain",
+                downloads=0,
+                task_categories=["climate-science", "meteorology"]
+            )
+        ]
+    }
+
+    
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
@@ -329,22 +491,59 @@ class DatasetFetcher:
         # Default to computer science datasets
         return self.FIELD_DATASETS.get("computer_science", [])[:2]
     
+    def get_topic_datasets(self, query: str) -> List[RealDataset]:
+        """
+        Return curated datasets based on TOPIC keywords in query.
+        This enables query-specific datasets (earthquake → USGS, weather → NOAA)
+        """
+        query_lower = query.lower()
+        topic_datasets = []
+        
+        # Check for topic keywords in query
+        for topic, datasets in self.TOPIC_DATASETS.items():
+            if topic in query_lower:
+                logger.info(f"[Datasets] Topic '{topic}' detected in query - adding curated datasets")
+                topic_datasets.extend(datasets)
+        
+        # Remove duplicates
+        seen = set()
+        unique = []
+        for d in topic_datasets:
+            if d.name not in seen:
+                seen.add(d.name)
+                unique.append(d)
+        
+        return unique[:5]  # Max 5 topic-specific datasets
+    
     def search_all(self, query: str, field: str = "", max_per_source: int = 3) -> List[RealDataset]:
         """
         Search all dataset sources and combine results.
+        PRIORITY ORDER:
+        1. Topic-specific curated datasets (earthquake, weather, etc.)
+        2. HuggingFace search results
+        3. Papers With Code search results
+        4. Field-specific curated datasets (only if no topic match)
         """
         all_datasets = []
         
-        # Search HuggingFace
-        hf_datasets = self.search_huggingface(query, max_per_source)
-        all_datasets.extend(hf_datasets)
+        # PRIORITY 1: Topic-specific curated datasets (most relevant!)
+        topic_datasets = self.get_topic_datasets(query)
+        if topic_datasets:
+            logger.info(f"[Datasets] Found {len(topic_datasets)} topic-specific datasets")
+            all_datasets.extend(topic_datasets)
         
-        # Search Papers With Code
-        pwc_datasets = self.search_papers_with_code(query, max_per_source)
-        all_datasets.extend(pwc_datasets)
+        # PRIORITY 2 & 3: Search APIs (only if we don't have enough topic datasets)
+        if len(all_datasets) < 3:
+            # Search HuggingFace
+            hf_datasets = self.search_huggingface(query, max_per_source)
+            all_datasets.extend(hf_datasets)
+            
+            # Search Papers With Code
+            pwc_datasets = self.search_papers_with_code(query, max_per_source)
+            all_datasets.extend(pwc_datasets)
         
-        # Add field-specific curated datasets
-        if field:
+        # PRIORITY 4: Field-specific curated datasets (fallback ONLY if no topic match)
+        if not topic_datasets and field:
             curated = self.get_field_datasets(field)
             all_datasets.extend(curated)
         
@@ -358,6 +557,7 @@ class DatasetFetcher:
         
         logger.info(f"[Datasets] Total found: {len(unique)}")
         return unique
+
     
     def format_datasets_for_display(self, datasets: List[RealDataset]) -> List[Dict[str, Any]]:
         """Format datasets for frontend display"""

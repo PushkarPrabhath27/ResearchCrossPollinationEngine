@@ -605,3 +605,98 @@ def fetch_real_papers(query: str, field: str = "", max_results: int = 30) -> Dic
 def format_papers(papers: List[RealPaper]) -> List[Dict[str, Any]]:
     """Format papers for frontend display"""
     return paper_fetcher.format_papers_for_display(papers)
+
+
+def format_papers_for_llm_context(papers: List[Dict]) -> List[Dict[str, Any]]:
+    """
+    PHASE 4: Format papers for LLM prompt with full details.
+    
+    Requirements from updatesprompt.md:
+    1. Sort by citation count (highest first)
+    2. Mark top 5 papers as [TOP CITED]
+    3. Include FULL abstract (not truncated)
+    4. Include full author list
+    5. Include journal, year, DOI, citations
+    
+    This ensures LLM has best papers to cite.
+    """
+    if not papers:
+        return []
+    
+    # Sort by citations (highest first)
+    sorted_papers = sorted(
+        papers, 
+        key=lambda p: p.get('citation_count', 0) if isinstance(p, dict) else getattr(p, 'citation_count', 0),
+        reverse=True
+    )
+    
+    formatted = []
+    for i, paper in enumerate(sorted_papers):
+        # Handle both dict and RealPaper objects
+        if isinstance(paper, dict):
+            formatted.append({
+                "marker": "[TOP CITED] " if i < 5 else "",
+                "rank": i + 1,
+                "title": paper.get('title', 'Untitled'),
+                "authors": paper.get('authors', 'Unknown'),
+                "full_author_list": paper.get('authors', 'Unknown'),  # Full list, not truncated
+                "year": paper.get('year', 'N/A'),
+                "journal": paper.get('journal', 'N/A'),
+                "doi": paper.get('doi', 'N/A'),
+                "url": paper.get('url', ''),
+                "citations": paper.get('citation_count', 0),
+                "citation_count": paper.get('citation_count', 0),
+                "abstract": paper.get('abstract', ''),  # Full abstract
+                "source": paper.get('source', 'unknown'),
+                "pdf_url": paper.get('pdf_url', '')
+            })
+        else:
+            # RealPaper object
+            formatted.append({
+                "marker": "[TOP CITED] " if i < 5 else "",
+                "rank": i + 1,
+                "title": paper.title,
+                "authors": paper.authors,
+                "full_author_list": paper.authors,
+                "year": paper.year,
+                "journal": paper.journal,
+                "doi": paper.doi,
+                "url": paper.url,
+                "citations": paper.citation_count,
+                "citation_count": paper.citation_count,
+                "abstract": paper.abstract,
+                "source": paper.source,
+                "pdf_url": paper.pdf_url
+            })
+    
+    return formatted
+
+
+def get_top_cited_papers(papers: List[Dict], top_n: int = 5) -> List[Dict]:
+    """
+    Get the top N highest-cited papers for highlighting.
+    These should be prioritized in the LLM prompt.
+    """
+    sorted_papers = sorted(
+        papers,
+        key=lambda p: p.get('citation_count', 0),
+        reverse=True
+    )
+    return sorted_papers[:top_n]
+
+
+def get_papers_by_author(papers: List[Dict], author_name: str) -> List[Dict]:
+    """
+    Find papers by a specific author.
+    Useful for matching experts to their papers.
+    """
+    matches = []
+    author_lower = author_name.lower()
+    
+    for paper in papers:
+        authors = paper.get('authors', '').lower()
+        if author_lower in authors:
+            matches.append(paper)
+    
+    return matches
+
