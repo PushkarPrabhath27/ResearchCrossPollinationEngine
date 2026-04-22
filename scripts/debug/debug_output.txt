@@ -1,0 +1,80 @@
+﻿.\venv\Scripts\python.exe : C:\Users\pushk\OneD
+rive\Documents\LangchainProject\hypothesis-engi
+ne\venv\lib\site-packages\google\api_core\_pyth
+on_version_support.py:266: FutureWarning: You 
+are using a Python version (3.10.11) which 
+Google will stop supporting in new releases of 
+google.api_core once it reaches its end of 
+life (2026-10-04). Please upgrade to the 
+latest Python version, or at least Python 
+3.11, to continue receiving updates for 
+google.api_core past that date.
+At line:1 char:1
++ .\venv\Scripts\python.exe 
+test_complete_debug.py 2>&1 | Out-File -Fil ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C 
+   :\Users\pushk\...past that date.:String) [  
+  ], RemoteException
+    + FullyQualifiedErrorId : NativeCommandErr 
+   or
+ 
+  warnings.warn(message, FutureWarning)
+============================================================
+COMPLETE DEBUG - Testing EXACT production code path
+============================================================
+
+[CONFIG] GROQ_API_KEY present: True
+[CONFIG] GOOGLE_API_KEY present: True
+[CONFIG] Google key (masked): AIzaSyAo...f6LE
+
+============================================================
+TEST 1: Gemini API with UPDATED December 2024 models
+============================================================
+
+[GEMINI] Trying: gemini-2.5-pro-preview-06-05
+[GEMINI] FAILED: NotFound: 404 models/gemini-2.5-pro-preview-06-05 is not found for API version v1beta, or is not supported for
+
+[GEMINI] Trying: gemini-2.0-flash
+[GEMINI] FAILED: ResourceExhausted: 429 You exceeded your current quota, please check your plan and billing details. For more informatio
+
+[GEMINI] Trying: gemini-2.0-flash-exp
+[GEMINI] FAILED: ResourceExhausted: 429 You exceeded your current quota, please check your plan and billing details. For more informatio
+
+[GEMINI] Trying: gemini-1.5-pro-latest
+[GEMINI] FAILED: NotFound: 404 models/gemini-1.5-pro-latest is not found for API version v1beta, or is not supported for genera
+
+[GEMINI] Trying: gemini-1.5-flash-latest
+[GEMINI] FAILED: NotFound: 404 models/gemini-1.5-flash-latest is not found for API version v1beta, or is not supported for gene
+
+[GEMINI] !!! ALL GEMINI MODELS FAILED !!!
+
+============================================================
+TEST 2: Groq API
+============================================================
+
+[GROQ] Trying: llama-3.3-70b-versatile
+[GROQ] SUCCESS! Response: {"test": "hello", "number": 42}...
+[GROQ] JSON PARSED: {'test': 'hello', 'number': 42}
+[GROQ] *** llama-3.3-70b-versatile WORKS! ***
+
+============================================================
+TEST 3: Complex JSON prompt (simulating production)
+============================================================
+
+[COMPLEX] Testing with complex prompt...
+[COMPLEX] Using working Groq model...
+[COMPLEX] Response length: 1559
+[COMPLEX] First 500 chars: ```
+{
+  "hypothesis_title": "Antibiotic Resistance Prediction Using Machine Learning",
+  "hypothesis": {
+    "main_claim": "Machine learning models can accurately predict antibiotic resistance in bacteria based on their genetic profiles.",
+    "theoretical_basis": "The hypothesis is based on the concept that bacterial genetic profiles contain patterns and features that can be learned by machine learning algorithms to predict antibiotic resistance.",
+    "novelty": "The use of machine learning fo...
+[COMPLEX] FAILED: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+============================================================
+DEBUG COMPLETE
+============================================================

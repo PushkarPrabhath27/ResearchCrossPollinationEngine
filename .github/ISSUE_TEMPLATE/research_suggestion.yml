@@ -1,0 +1,35 @@
+name: Research Suggestion
+description: Propose a new scientific methodology, data source, or cross-disciplinary analogy.
+title: "[RESEARCH]: "
+labels: ["research", "discussion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        RCPE thrives on scientific insight. Use this template to suggest new research directions for the engine.
+  - type: textarea
+    id: methodology
+    attributes:
+      label: Methodology / Analogy Description
+      description: Describe the scientific concept or cross-disciplinary analogy you'd like the engine to explore.
+    validations:
+      required: true
+  - type: textarea
+    id: justification
+    attributes:
+      label: Scientific Justification
+      description: Why is this connection novel? What problem does it solve?
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: Foundational Papers / References
+      description: Please provide links or citations to the research that supports this suggestion.
+    validations:
+      required: true
+  - type: input
+    id: data_sources
+    attributes:
+      label: Relevant Data Sources
+      description: Are there specific datasets (e.g., bioRxiv, arXiv, CERN Open Data) that should be targeted?
