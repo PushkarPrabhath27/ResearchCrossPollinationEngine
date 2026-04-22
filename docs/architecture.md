@@ -1,43 +1,89 @@
-# RCPE Architecture Deep Dive
+# RCPE System Architecture: Technical Deep Dive
 
-This document provides a technical overview of the Research Cross-Pollination Engine (RCPE) internal components and data flow.
+The Research Cross-Pollination Engine (RCPE) is an enterprise-grade agentic system designed for the automated discovery of scientific analogies. This document provides an exhaustive technical breakdown of the platform's layers, data flows, and decision-making logic.
 
-## 1. Orchestration Layer
+---
 
-We use **LangChain** for agentic orchestration. The `Orchestrator` is responsible for:
-- **Intent Analysis**: Using LLMs to parse the user's research query.
-- **Plan Generation**: Decomposing the query into sub-tasks for specialized agents.
-- **Context Synthesis**: Aggregating findings from multiple agents into a coherent hypothesis.
+## 1. High-Level System Design
 
-## 2. Agent Archetypes
+RCPE follows a **Decoupled Agentic Micro-Architecture**. The system is divided into four distinct planes:
 
-RCPE utilizes four distinct agent types:
+1.  **Ingestion Plane**: Responsible for fetching, parsing, and embedding scientific literature from global repositories.
+2.  **Vector Plane**: The persistent memory layer using ChromaDB, optimized for high-dimensional semantic search.
+3.  **Agentic Reasoning Plane**: The "Brain" of the system, where multi-agent swarms perform reasoning, criticism, and synthesis.
+4.  **Interface Plane**: A dual-layered approach offering a RESTful API (FastAPI) and a modern Web UI (Next.js).
 
-| Agent | Responsibility | Primary Tools |
-|-------|----------------|---------------|
-| **Primary Domain Agent** | Maps the current knowledge in the user's field. | Vector Search, Citation Network Explorer |
-| **Cross-Domain Explorer** | Identifies analogous problems in unrelated fields. | Multi-Field Search, Analogy Finder |
-| **Methodology Translator** | Adapts techniques from source fields to the target. | Method Detail Retriever, implementation_analyzer |
-| **Resource Locator** | Finds datasets, code repos, and protocols. | Dataset Search, GitHub Search |
+---
 
-## 3. Data & Retrieval Engine
+## 2. The Agent Swarm (Orchestration Layer)
 
-### Vector Database
-We use **Chroma DB** for local development and support **Pinecone** for production scaling. 
-- **Embeddings**: We use `sentence-transformers/allenai-specter` for its superior performance on scientific document abstracts.
-- **Retrieval Strategy**: Multi-Query Retrieval + Re-ranking (Cross-Encoder) for maximum precision.
+We utilize **LangChain's StateGraph** patterns (transitioning to a custom DAG-based orchestrator) to manage the multi-step reasoning process.
 
-### Ingestion Pipeline
-- **arXiv**: Fetched via the `arxiv` Python package.
-- **PubMed/PMC**: Fetched via BioPython (Entrez API).
-- **Semantic Scholar**: Primary source for citation graph analysis.
-- **OpenAlex**: Used for broad coverage across all academic fields.
+### A. Intent Analyst (The Gatekeeper)
+*   **Input**: Natural language research query.
+*   **Logic**: Performs query expansion and entity extraction. It translates "improve solar cells" into structural requirements: *Photon capture efficiency, charge carrier transport, lattice stability.*
+*   **Prompting**: Uses Few-Shot Chain-of-Thought (CoT) to decompose complexity.
 
-## 4. Frontend-Backend Interaction
+### B. The Discovery Agents (The Explorers)
+*   **Primary Domain Specialist**: Focused on the "exploitation" of current field knowledge. It retrieves state-of-the-art (SOTA) benchmarks.
+*   **Cross-Domain Explorer**: Focused on "exploration." It uses **Diversified Semantic Retrieval (DSR)** to find papers with high structural similarity but low keyword overlap.
 
-The system exposes a **FastAPI** backend that provides:
-- `/generate`: Main endpoint for hypothesis creation.
-- `/sources`: Endpoint to retrieve full metadata for cited papers.
-- `/stats`: Provides real-time stats on document coverage and ingestion health.
+### C. The Synthesis Engine (The Builder)
+*   **Methodology Translator**: This agent is specialized in **Domain-Invariant Mapping**. It extracts the *underlying mathematical or structural logic* of a source method (e.g., Stochastic Gradient Descent) and re-maps it to a new target domain (e.g., optimizing metabolic pathways).
 
-The frontend is built with **Next.js**, emphasizing a clean, "scientific" aesthetic with support for Mermaid diagram rendering and LaTeX math notation.
+---
+
+## 3. Data Ingestion & Retrieval Strategy
+
+### Vector Indexing
+*   **Embedding Model**: `allenai-specter-v2`. Chosen for its citation-informed pre-training, which captures the functional relationships between papers.
+*   **Retrieval Logic**: We employ a **Hybrid RAG** approach:
+    *   **Vector Search**: Semantic similarity.
+    *   **Keyword Search (BM25)**: Technical terminology precision.
+    *   **Metadata Filtering**: Temporal (year), impact (citation count), and venue (Nature, Science, arXiv).
+
+### Source Integration
+| Source | Connector | Data Format | Rate Handling |
+| :--- | :--- | :--- | :--- |
+| **arXiv** | OAI-PMH Wrapper | TeX / PDF | Bulk-XML parsing |
+| **PubMed** | Entrez API | XML | NCBI API Key throttling |
+| **Semantic Scholar** | REST API | JSON-LD | Adaptive backoff |
+| **OpenAlex** | Bulk Snapshot | JSON | Parquet-optimized loading |
+
+---
+
+## 4. Scientific Integrity & Validation
+
+To eliminate LLM hallucinations—a critical requirement for scientific tools—RCPE implements the **"Evidence Chain"** protocol:
+
+1.  **Citation Pinning**: Every generated claim *must* be followed by a unique identifier (DOI/arXiv ID).
+2.  **Post-Generation Verification**: The **Scientific Critic** agent takes the generated hypothesis and attempts to "disprove" it by retrieving counter-evidence.
+3.  **Source Verification**: The system performs a real-time lookup of cited DOIs to ensure the paper titles and abstracts match the context used by the LLM.
+
+---
+
+## 5. Infrastructure & Scalability
+
+RCPE is designed for **Cloud-Native Deployment**:
+
+*   **Containerization**: Full Docker support with multi-stage builds.
+*   **Orchestration**: Kubernetes manifests for auto-scaling agent workers based on query load.
+*   **Caching Layer**: Redis-backed semantic caching to prevent redundant LLM calls for similar research queries.
+*   **Telemetry**: Integrated Prometheus metrics for monitoring agent latency and token consumption.
+
+---
+
+## 6. Mathematical Evaluation Model
+
+The system evaluates hypotheses using the **Discovery Fitness Function ($f$):**
+
+$$f(h) = \alpha \cdot \text{Novelty}(h) + \beta \cdot \text{Feasibility}(h) + \gamma \cdot \text{Impact}(h)$$
+
+Where:
+*   $\text{Novelty}(h) = 1 - \text{sim}(\text{Embed}(h), \text{Embed}(D_{\text{target}}))$
+*   $\text{Feasibility}(h)$ is a sigmoid function of available datasets ($d$) and code ($c$).
+*   $\text{Impact}(h)$ is a weighted average of source paper centrality in the global citation graph.
+
+---
+
+*This architecture ensures that RCPE is not just a search tool, but a robust platform for verifiable scientific innovation.*
